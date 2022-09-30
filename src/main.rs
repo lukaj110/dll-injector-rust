@@ -10,16 +10,8 @@ use um::winnt::{
 use winapi::ctypes::c_void;
 use winapi::*;
 
-fn get_dll_path() -> Option<String> {
-    print!(
-        "Enter the DLL Path [Absolute or Relative to '{}']: ",
-        std::env::current_dir().unwrap().to_str().unwrap()
-    );
-    std::io::stdout().flush().unwrap();
-
-    let mut dll_path = String::new();
-    std::io::stdin().read_line(&mut dll_path).unwrap();
-    dll_path = dll_path.trim().to_string().to_lowercase();
+fn get_dll_path(dll_path: String) -> Option<String> {
+    let dll_path = dll_path.trim().to_string().to_lowercase();
 
     if !dll_path.ends_with(".dll") {
         println!("Invalid path to DLL.");
@@ -35,10 +27,10 @@ fn get_dll_path() -> Option<String> {
     return Some(path.unwrap().to_str().unwrap().to_string());
 }
 
-fn get_input_process() -> Option<usize> {
+fn get_input_process() -> Option<(String, usize)> {
     print!("Enter the process name to be injected: ");
 
-    std::io::stdout().flush().expect("Failed to flush stdout");
+    _ = std::io::stdout().flush();
 
     let mut input = String::new();
     let mut process_name = String::new();
@@ -65,8 +57,10 @@ fn get_input_process() -> Option<usize> {
         return None;
     }
 
+    let process = process_array[0];
+
     if process_array.len() == 1 {
-        return Some(process_array[0].pid().as_u32() as usize);
+        return Some((process.name().to_string(), process.pid().as_u32() as usize));
     }
 
     process_array.sort_by(|a, b| b.memory().cmp(&a.memory()));
@@ -83,39 +77,86 @@ fn get_input_process() -> Option<usize> {
 
     print!("Enter the ID of the process you want to inject into: ");
 
-    std::io::stdout().flush().expect("Failed to flush stdout");
+    _ = std::io::stdout().flush();
 
     std::io::stdin().read_line(&mut input).unwrap();
 
-    return Some(
-        process_array[input.trim().parse().unwrap_or(1) - 1]
-            .pid()
-            .as_u32() as usize,
-    );
+    let process = process_array[input.trim().parse().unwrap_or(1) - 1];
+
+    return Some((process.name().to_string(), process.pid().as_u32() as usize));
 }
 
 fn main() {
-    let dll_option = get_dll_path();
+    let args: Vec<String> = std::env::args().collect();
 
-    if dll_option.is_none() {
-        return;
+    let mut dll_path: String = String::new();
+    let process_name: String;
+    let process_pid: usize;
+
+    if args.len() != 3 {
+        print!(
+            "Enter the DLL Path [Absolute or Relative to '{}']: ",
+            std::env::current_dir().unwrap().to_str().unwrap()
+        );
+        std::io::stdout().flush().unwrap();
+
+        std::io::stdin().read_line(&mut dll_path).unwrap();
+
+        let dll_option = get_dll_path(dll_path);
+
+        if dll_option.is_none() {
+            return;
+        }
+
+        dll_path = dll_option.unwrap();
+
+        let pid_option = get_input_process();
+
+        if pid_option.is_none() {
+            return;
+        }
+
+        let process_data = pid_option.unwrap();
+
+        process_name = process_data.0;
+        process_pid = process_data.1;
+    } else {
+        let pid_query_str = &args[1];
+        let dll_path_query = &args[2];
+
+        let pid_query_parse = pid_query_str.parse::<u32>();
+
+        if pid_query_parse.is_err() {
+            println!("Usage: dll-injector-rust.exe <PID> <DLL Path>");
+            return;
+        }
+
+        let pid_query = pid_query_parse.unwrap();
+
+        let system = sysinfo::System::new_all();
+
+        let process_option = system.process(Pid::from_u32(pid_query));
+
+        if process_option.is_none() {
+            println!("No process found with PID {}", pid_query);
+            return;
+        }
+
+        let process = process_option.unwrap();
+
+        process_name = process.name().to_string();
+        process_pid = process.pid().as_u32() as usize;
+
+        let dll_path_option = get_dll_path(dll_path_query.to_string());
+        if dll_path_option.is_none() {
+            println!("Usage: dll-injector-rust.exe <PID> <DLL Path>");
+            return;
+        }
+
+        dll_path = dll_path_option.unwrap();
     }
 
-    let dll_path = dll_option.unwrap();
-
-    let system = sysinfo::System::new_all();
-
-    let pid_option = get_input_process();
-
-    if pid_option.is_none() {
-        return;
-    }
-
-    let process_pid = pid_option.unwrap();
-
-    let process = system.process(Pid::from(process_pid)).unwrap();
-
-    println!("\nInjecting into {}, PID {}", process.name(), process.pid());
+    println!("\nInjecting into {}, PID {}", process_name, process_pid);
 
     unsafe {
         fn close_with_message(handle: *mut c_void, message: &str) {
@@ -198,6 +239,6 @@ fn main() {
 
         println!("Remote thread: {:?}", remote_thread);
 
-        um::handleapi::CloseHandle(process_handle);
+        close_with_message(process_handle, "Injection successful");
     }
 }
