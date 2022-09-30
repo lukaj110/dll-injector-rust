@@ -20,3 +20,7 @@ cargo run -- [Process ID (PID)] [DLL Path]
 ### Parameters
 
 Alternatively you may just run the executable without any parameters and enter them in the console interactively.
+
+### Testing
+
+You can use the provided `Test.dll` file to test the injector. All it does is display a message box when injected into a process and when the process exits.
