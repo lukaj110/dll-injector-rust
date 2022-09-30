@@ -1,7 +1,10 @@
 # Rust DLL Injector
 
-This is a simple DLL injector written in Rust. <br/><br/>
+This is a simple DLL injector written in Rust. <br/>
+
 It uses [CreateRemoteThread](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createremotethread) so don't use it for games as it will most probably get detected by the anti-cheat.
+
+Keep in mind that this won't work if the DLL is managed (.NET). This feature might be added in the future.
 
 ## Usage
 
